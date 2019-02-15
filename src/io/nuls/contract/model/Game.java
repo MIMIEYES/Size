@@ -49,9 +49,8 @@ public class Game {
 
     private int winnerSelection;
 
-    public Game(long id, BigDecimal gamebling, Creator creator, int status, long createHeight) {
+    public Game(long id, Creator creator, int status, long createHeight) {
         this.id = id;
-        this.gamebling = gamebling;
         this.creator = creator;
         this.status = status;
         this.createHeight = createHeight;
@@ -128,7 +127,7 @@ public class Game {
         sb.append("\"id\":")
                 .append(id);
         sb.append(",\"gamebling\":")
-                .append(gamebling.toPlainString());
+                .append(gamebling != null ? gamebling.toPlainString() : "\"-\"");
         sb.append(",\"creator\":")
                 .append(creator != null ? creator.toString() : "\"-\"");
         sb.append(",\"participant\":")

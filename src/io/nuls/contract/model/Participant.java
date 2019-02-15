@@ -25,6 +25,8 @@ package io.nuls.contract.model;
 
 import io.nuls.contract.sdk.Address;
 
+import java.math.BigDecimal;
+
 /**
  * @author: PierreLuo
  * @date: 2019/1/7
@@ -35,6 +37,8 @@ public class Participant {
 
     //TODO 0-small, 1-big
     private int selection;
+
+    private BigDecimal bet;
 
     private String luckyNumberHash;
 
@@ -95,6 +99,14 @@ public class Participant {
         isWinner = winner;
     }
 
+    public BigDecimal getBet() {
+        return bet;
+    }
+
+    public void setBet(BigDecimal bet) {
+        this.bet = bet;
+    }
+
     @Override
     public String toString() {
         final StringBuilder sb = new StringBuilder("{");
@@ -104,6 +116,8 @@ public class Participant {
                 .append(selection == 0 ? "\"small\"" : (selection == 1 ? "\"big\"" : "\"-\""));
         sb.append(",\"isWinner\":")
                 .append(isWinner);
+        sb.append(",\"bet\":")
+                .append(bet == null ? "\"-\"" : bet.toPlainString());
         sb.append('}');
         return sb.toString();
     }

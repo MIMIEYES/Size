@@ -23,12 +23,10 @@
  */
 package io.nuls.contract.util;
 
-import io.nuls.contract.sdk.Block;
-import io.nuls.contract.sdk.Msg;
-
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
+import static io.nuls.contract.sdk.Utils.getRandomSeed;
 /**
  * @author: PierreLuo
  * @date: 2019/1/7
@@ -43,12 +41,14 @@ public class GameUtil {
         return nuls.scaleByPowerOfTen(8).toBigInteger();
     }
 
-    public static float pseudoRandom(long seed) {
-        int hash1 = Block.currentBlockHeader().getPackingAddress().toString().substring(2).hashCode();
-        int hash2 = Msg.address().toString().substring(2).hashCode();
-        int hash4 = Long.valueOf(Block.timestamp()).toString().hashCode();
-        long hash = seed ^ (long)hash1 ^ (long)hash2 ^ (long)hash4;
-        seed = hash * 25214903917L + 11L & 281474976710655L;
-        return (float)((int)(seed >>> 24)) / 1.6777216E7F;
+    public static int random(long endHeight, int count, int range) {
+        BigInteger orginSeed = getRandomSeed(endHeight, count, "sha3");
+        if (orginSeed.equals(BigInteger.ZERO)) {
+            return -1;
+        }
+        BigInteger wrapperRange = BigInteger.valueOf((long) range);
+        BigInteger mod = orginSeed.mod(wrapperRange);
+        return mod.add(BigInteger.ONE).intValue();
     }
+
 }

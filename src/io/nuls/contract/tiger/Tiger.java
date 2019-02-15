@@ -38,7 +38,9 @@ import io.nuls.contract.util.GameUtil;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static io.nuls.contract.sdk.Utils.require;
 
@@ -51,9 +53,11 @@ public class Tiger extends Donation implements Contract {
      * 游戏列表
      */
     private List<Game> gameList;
+    private Map<String, List<Long>> userGameListMap;
 
     public Tiger() {
         this.gameList = new ArrayList<Game>();
+        this.userGameListMap = new HashMap<String, List<Long>>();
     }
 
     @Override
@@ -64,16 +68,31 @@ public class Tiger extends Donation implements Contract {
 
     @Payable
     public long createGame(int selection) {
+        require(selection == 0 || selection == 1, "Please enter 0 or 1 in selection.(0 - small, 1 - big)");
         Address sender = Msg.sender();
         BigDecimal nuls = GameUtil.toNuls(Msg.value());
-        require(nuls.compareTo(BigDecimal.ONE) > 0, "The amount must be greater than 1 NULS.");
+
+        require(nuls.compareTo(BigDecimal.ONE) >= 0, "The amount must be greater than or equal to 1.00000000 NULS.");
         long id = gameList.size() + 1;
         int status = 0;
-        require(selection == 0 || selection == 1, "Please enter 0(small) or 1(big) in selection.");
 
         Creator creator = new Creator(sender, selection);
-        gameList.add(new Game(id, nuls, creator, status, Block.number()));
+        creator.setBet(nuls);
+        gameList.add(new Game(id, creator, status, Block.number()));
+        addUserGameListMap(sender.toString(), id);
+
         return id;
+    }
+
+    private void addUserGameListMap(String address, long id) {
+        List<Long> userGameList = null;
+        if((userGameList = userGameListMap.get(address)) != null) {
+            userGameList.add(id);
+        } else {
+            userGameList = new ArrayList<Long>();
+            userGameList.add(id);
+            userGameListMap.put(address, userGameList);
+        }
     }
 
     @Payable
@@ -87,23 +106,21 @@ public class Tiger extends Donation implements Contract {
             require(status == 0, "The game already has a participant.");
         }
         BigDecimal nuls = GameUtil.toNuls(Msg.value());
-        require(game.getGamebling().compareTo(nuls) == 0, "You need to pay " + game.getGamebling().toPlainString() + "NULS.");
-
         Creator creator = game.getCreator();
+        BigDecimal creatorBet = creator.getBet();
+        require(nuls.compareTo(BigDecimal.ONE) >= 0 && creatorBet.compareTo(nuls) >= 0, "You need to pay at least 1.00000000 NULS, up to " + creatorBet.toPlainString() + " NULS.");
+
         Address sender = Msg.sender();
         int selection = creator.getSelection() ^ 1;
         Participant participant = new Participant(sender, selection);
+        participant.setBet(nuls);
+
         game.setParticipant(participant);
         game.setStatus(1);
-        game.setGamebling(game.getGamebling().add(nuls));
+        game.setGamebling(nuls.add(nuls));
+        game.setDrawHeight(Block.number() + 10);
+        addUserGameListMap(sender.toString(), gameId);
 
-        String creatorAddressStr = creator.getAddress().toString();
-        String participantAddressStr = participant.getAddress().toString();
-        int result = creatorAddressStr.hashCode();
-        result = 31 * result + participantAddressStr.hashCode();
-        result = 31 * result + game.getGamebling().hashCode();
-        long h = (long) (GameUtil.pseudoRandom(result) * 10) + 1;
-        game.setDrawHeight(Block.number() + h);
         return gameId;
     }
 
@@ -120,17 +137,21 @@ public class Tiger extends Donation implements Contract {
         require(Block.number() > drawHeight, "Not yet at the draw time. Please draw after " + drawHeight + " block height.");
 
         // 计算得奖结果
-        String blockhash = Block.blockhash(drawHeight);
-        require(blockhash != null && blockhash.length() > 0, "The block hash is null, the block height is " + drawHeight + ".");
+        //String blockhash = Block.blockhash(drawHeight);
+        //require(blockhash != null && blockhash.length() > 0, "The block hash is null, the block height is " + drawHeight + ".");
         Creator creator = game.getCreator();
         Participant participant = game.getParticipant();
-        String creatorAddressStr = creator.getAddress().toString();
-        String participantAddressStr = participant.getAddress().toString();
-        int result = creatorAddressStr.hashCode();
-        result = 31 * result + participantAddressStr.hashCode();
-        result = 31 * result + game.getGamebling().hashCode();
-        result = 31 * result + blockhash.hashCode();
-        int number = (int) (GameUtil.pseudoRandom(result) * 16) + 1;
+        Address creatorAddress = creator.getAddress();
+        Address participantAddress = participant.getAddress();
+        String creatorAddressStr = creatorAddress.toString();
+        String participantAddressStr = participantAddress.toString();
+        //int result = creatorAddressStr.hashCode();
+        //result = 31 * result + participantAddressStr.hashCode();
+        //result = 31 * result + game.getGamebling().hashCode();
+        //result = 31 * result + blockhash.hashCode();
+        //int number = (int) (GameUtil.pseudoRandom(result) * 16) + 1;
+        int number = GameUtil.random(drawHeight, 10, 16);
+        require(number > 0, "Failed to get random number.");
         int winner = number > 8 ? 1 : 0;
         game.setWinnerSelection(winner);
         boolean isCreatorWin = creator.getSelection() == winner;
@@ -144,11 +165,16 @@ public class Tiger extends Donation implements Contract {
         if(isCreatorWin) {
             winnerAddress = creatorAddressStr;
             creator.setWinner(true);
-            creator.getAddress().transfer(prize);
+            creatorAddress.transfer(prize);
         } else {
             winnerAddress = participantAddressStr;
             participant.setWinner(true);
-            participant.getAddress().transfer(prize);
+            participantAddress.transfer(prize);
+            // 退回多余的NULS
+            BigDecimal refund = creator.getBet().subtract(participant.getBet());
+            if(refund.compareTo(BigDecimal.ZERO) > 0) {
+                creatorAddress.transfer(GameUtil.toNa(refund));
+            }
         }
 
         return winnerAddress;
@@ -163,20 +189,22 @@ public class Tiger extends Donation implements Contract {
             require(status == 0, "The game already has a participant.");
         }
 
+        Creator creator = game.getCreator();
         Address sender = Msg.sender();
-        require(sender.equals(game.getCreator().getAddress()), "Only the creator of the game can execute it.");
+        Address creatorAddress = creator.getAddress();
+        require(sender.equals(creatorAddress), "Only the creator of the game can execute it.");
 
         long createHeight = game.getCreateHeight();
         long currentHeight = Block.number();
         long interval = currentHeight - createHeight;
         require(interval > 100, "You can cancel the game after " + (createHeight + 100) + " block height.");
-        BigInteger bet = GameUtil.toNa(game.getGamebling());
+        BigInteger bet = GameUtil.toNa(creator.getBet());
 
         // 结束游戏
         game.setStatus(2);
 
         // 退还NULS
-        game.getCreator().getAddress().transfer(bet);
+        creatorAddress.transfer(bet);
     }
 
     @View
@@ -190,7 +218,7 @@ public class Tiger extends Donation implements Contract {
     }
 
     @View
-    public List<Game> listRunningGames() {
+    public List<Game> viewRunningGameList() {
         List<Game> result = new ArrayList<Game>();
         for(Game game : gameList) {
             if(game.getStatus() == 0) {
@@ -201,11 +229,24 @@ public class Tiger extends Donation implements Contract {
     }
 
     @View
-    public List<Game> listDrawingGames() {
+    public List<Game> viewDrawingGameList() {
         List<Game> result = new ArrayList<Game>();
         for(Game game : gameList) {
             if(game.getStatus() == 1) {
                 result.add(game);
+            }
+        }
+        return result;
+    }
+
+    @View
+    public List<Game> viewUserGameList(Address user) {
+        List<Game> result = new ArrayList<Game>();
+        String userStr = user.toString();
+        List<Long> idList = userGameListMap.get(userStr);
+        if(idList != null && !idList.isEmpty()) {
+            for(Long id : idList) {
+                result.add(gameList.get((int) (id - 1)));
             }
         }
         return result;
