@@ -33,6 +33,8 @@ import static io.nuls.contract.sdk.Utils.getRandomSeed;
  */
 public class GameUtil {
 
+    public static final BigInteger B_200 = BigInteger.valueOf(200);
+    public static final BigInteger B_100 = BigInteger.valueOf(100);
     public static BigDecimal toNuls(BigInteger na) {
         return new BigDecimal(na).movePointLeft(8);
     }

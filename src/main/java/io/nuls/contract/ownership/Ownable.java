@@ -5,8 +5,11 @@ import io.nuls.contract.sdk.Event;
 import io.nuls.contract.sdk.Msg;
 import io.nuls.contract.sdk.annotation.View;
 
+import java.math.BigInteger;
+
 import static io.nuls.contract.sdk.Utils.emit;
 import static io.nuls.contract.sdk.Utils.require;
+import static io.nuls.contract.util.GameUtil.B_100;
 
 public class Ownable {
 
@@ -17,9 +20,18 @@ public class Ownable {
 
     protected Address owner;
 
+    // range: 0~100
+    protected BigInteger commissionRate;
+
     public Ownable() {
         this.owner = Msg.sender();
         this.contractCreator = this.owner;
+        this.commissionRate = BigInteger.ONE;
+    }
+
+    public void updateCommissionRate(BigInteger newCommissionRate) {
+        require(newCommissionRate.compareTo(BigInteger.ZERO) >= 0 && newCommissionRate.compareTo(B_100) <= 0, "range: 0~100");
+        this.commissionRate = newCommissionRate;
     }
 
     @View

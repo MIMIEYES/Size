@@ -31,6 +31,7 @@ import io.nuls.contract.sdk.Address;
 import io.nuls.contract.sdk.Block;
 import io.nuls.contract.sdk.Contract;
 import io.nuls.contract.sdk.Msg;
+import io.nuls.contract.sdk.annotation.JSONSerializable;
 import io.nuls.contract.sdk.annotation.Payable;
 import io.nuls.contract.sdk.annotation.View;
 import io.nuls.contract.util.GameUtil;
@@ -43,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 
 import static io.nuls.contract.sdk.Utils.require;
+import static io.nuls.contract.util.GameUtil.B_200;
 
 /**
  * @author: PierreLuo
@@ -137,19 +139,12 @@ public class Tiger extends Donation implements Contract {
         require(Block.number() > drawHeight, "Not yet at the draw time. Please draw after " + drawHeight + " block height.");
 
         // 计算得奖结果
-        //String blockhash = Block.blockhash(drawHeight);
-        //require(blockhash != null && blockhash.length() > 0, "The block hash is null, the block height is " + drawHeight + ".");
         Creator creator = game.getCreator();
         Participant participant = game.getParticipant();
         Address creatorAddress = creator.getAddress();
         Address participantAddress = participant.getAddress();
         String creatorAddressStr = creatorAddress.toString();
         String participantAddressStr = participantAddress.toString();
-        //int result = creatorAddressStr.hashCode();
-        //result = 31 * result + participantAddressStr.hashCode();
-        //result = 31 * result + game.getGamebling().hashCode();
-        //result = 31 * result + blockhash.hashCode();
-        //int number = (int) (GameUtil.pseudoRandom(result) * 16) + 1;
         int number = GameUtil.random(drawHeight, 10, 16);
         require(number > 0, "Failed to get random number.");
         int winner = number > 8 ? 1 : 0;
@@ -162,6 +157,10 @@ public class Tiger extends Donation implements Contract {
         // 发奖
         String winnerAddress;
         BigInteger prize = calPrize(game);
+        // Platform commission
+        BigInteger commission = prize.multiply(commissionRate).divide(B_200);
+        viewOwner().transfer(commission);
+        prize = prize.subtract(commission);
         if(isCreatorWin) {
             winnerAddress = creatorAddressStr;
             creator.setWinner(true);
@@ -170,13 +169,12 @@ public class Tiger extends Donation implements Contract {
             winnerAddress = participantAddressStr;
             participant.setWinner(true);
             participantAddress.transfer(prize);
-            // 退回多余的NULS
-            BigDecimal refund = creator.getBet().subtract(participant.getBet());
-            if(refund.compareTo(BigDecimal.ZERO) > 0) {
-                creatorAddress.transfer(GameUtil.toNa(refund));
-            }
         }
-
+        // 退回多余的NULS
+        BigDecimal refund = creator.getBet().subtract(participant.getBet());
+        if(refund.compareTo(BigDecimal.ZERO) > 0) {
+            creatorAddress.transfer(GameUtil.toNa(refund));
+        }
         return winnerAddress;
     }
 
@@ -218,6 +216,7 @@ public class Tiger extends Donation implements Contract {
     }
 
     @View
+    @JSONSerializable
     public List<Game> viewRunningGameList() {
         List<Game> result = new ArrayList<Game>();
         for(Game game : gameList) {
@@ -229,6 +228,7 @@ public class Tiger extends Donation implements Contract {
     }
 
     @View
+    @JSONSerializable
     public List<Game> viewDrawingGameList() {
         List<Game> result = new ArrayList<Game>();
         for(Game game : gameList) {
@@ -240,6 +240,7 @@ public class Tiger extends Donation implements Contract {
     }
 
     @View
+    @JSONSerializable
     public List<Game> viewUserGameList(Address user) {
         List<Game> result = new ArrayList<Game>();
         String userStr = user.toString();
